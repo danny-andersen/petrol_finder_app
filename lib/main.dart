@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -29,7 +28,7 @@ class _AppState extends State<PetrolFinderApp> {
   FuelFinderTokenManager? _tokenManager;
   FuelFinderCredentials? _fuelFinderCredentials;
   LatLong? pos;
-  String fuel = defaultFuel;
+  FuelType fuel = defaultFuel;
   double radius = maxRadiusMiles, mpg = defaultMpg, tank = defaultTankLitres;
   bool busy = false;
   bool _finding = false;
@@ -37,6 +36,7 @@ class _AppState extends State<PetrolFinderApp> {
   DateTime? lastSync;
   final List<Map<String, dynamic>> _nearbyResults = [];
   int _stationsInRange = 0;
+  SortType _sortType = SortType.totalCost;
 
   @override
   void initState() {
@@ -45,7 +45,6 @@ class _AppState extends State<PetrolFinderApp> {
   }
 
   Future<void> _load(BuildContext context) async {
-    final sp = await SharedPreferences.getInstance();
     try {
       if (context.mounted) {
         final raw = await DefaultAssetBundle.of(context)
@@ -58,15 +57,12 @@ class _AppState extends State<PetrolFinderApp> {
     } catch (e) {
       status = 'Fuel Finder credentials unavailable: $e';
     }
-    fuel = sp.getString('fuel_type') ?? defaultFuel;
-    radius = sp.getDouble('radius_miles') ?? maxRadiusMiles;
-    mpg = sp.getDouble('mpg') ?? defaultMpg;
-    tank = sp.getDouble('tank_litres') ?? defaultTankLitres;
     cache = await CacheStore().load();
     pos = await currentPosition();
     if (context.mounted) {
       setState(() {});
       await _sync(context);
+      await _find(context);
     }
   }
 
@@ -106,14 +102,14 @@ class _AppState extends State<PetrolFinderApp> {
 
   Future<void> _find(BuildContext context) async {
     try {
-      pos = await currentPosition();
       if (!context.mounted) return;
       setState(() {
         _nearbyResults.clear();
         _stationsInRange = 0;
         _finding = true;
-        status = 'Scanning cached stations…';
+        status = 'Waiting for GPS...';
       });
+      pos = await currentPosition();
       List<String> stationIdsInRange = [];
 
       final stations = List<dynamic>.from(cache?['stations'] ?? const []);
@@ -144,7 +140,7 @@ class _AppState extends State<PetrolFinderApp> {
                 1609.344;
             if (straight <= rad) {
               final matching = s.fuelPrices.where(
-                (x) => x['fuel_type'] == fuel,
+                (x) => x['fuel_type'] == fuel.type,
               );
               final price = matching.isEmpty ? null : matching.first;
               if (price != null && price['price'] is num) {
@@ -190,40 +186,20 @@ class _AppState extends State<PetrolFinderApp> {
       if (context.mounted) {
         setState(() {
           _finding = false;
-          status = '${_nearbyResults.length} stations found in $radius miles';
+          status =
+              '${_nearbyResults.length} stations found in $radius miles, checkng routes…';
         });
       }
 
       // Calculate road routes.
       await _routes(context, _nearbyResults);
-
-      //Further sort
-
-      // final c = Map<String, dynamic>.from(cache ?? {});
-      // c['current_location'] = {
-      //   'latitude': pos!.latitude,
-      //   'longitude': pos!.longitude,
-      // };
-      // c['settings'] = {
-      //   'fuel_type': fuel,
-      //   'radius_miles': radius,
-      //   'mpg': mpg,
-      //   'tank_litres': tank,
-      // };
-      // c['nearby_results'] = _nearbyResults.take(10).map((x) {
-      //   final p = x['pfs'] as Pfs;
-      //   return {
-      //     'node_id': p.id,
-      //     'price': x['price'],
-      //     'distanceMeters': x['distanceMeters'],
-      //     'duration': x['duration'],
-      //     'fill': x['fill'],
-      //     'driveCost': x['driveCost'] ?? 0,
-      //     'totalCost': (x['fill'] as double) + (x['driveCost'] ?? 0),
-      //   };
-      // }).toList();
-      // cache = c;
-      // await CacheStore().save(c);
+      _sort(context);
+      if (context.mounted) {
+        setState(() {
+          status =
+              'Routes for ${_nearbyResults.length} stations found in $radius miles';
+        });
+      }
     } catch (e) {
       _finding = false;
       if (context.mounted) {
@@ -231,6 +207,45 @@ class _AppState extends State<PetrolFinderApp> {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('$e')));
       }
+    }
+  }
+
+  void _sort(BuildContext context) {
+    if (context.mounted) {
+      setState(() {
+        switch (_sortType) {
+          case SortType.price:
+            _nearbyResults.sort(
+              (a, b) => (a['price'] as double).compareTo(b['price'] as double),
+            );
+            break;
+          case SortType.distance:
+            _nearbyResults.sort(
+              (a, b) =>
+                  (a['distanceMeters'] == null || b['distanceMeters'] == null)
+                  ? (a['straight'] as num).compareTo(b['straight'] as num)
+                  : (a['distanceMeters'] as num).compareTo(
+                      b['distanceMeters'] as num,
+                    ),
+            );
+            break;
+          case SortType.totalCost:
+            _nearbyResults.sort(
+              (a, b) => ((a['fill'] as double) + (a['driveCost'] ?? 0))
+                  .compareTo((b['fill'] as double) + (b['driveCost'] ?? 0)),
+            );
+            break;
+          case SortType.time:
+            _nearbyResults.sort(
+              (a, b) => (a['duration'] == null || b['duration'] == null)
+                  ? (a['straight'] as num).compareTo(b['straight'] as num)
+                  : (a['duration'] as double).compareTo(
+                      b['duration'] as double,
+                    ),
+            );
+            break;
+        }
+      });
     }
   }
 
@@ -281,19 +296,13 @@ class _AppState extends State<PetrolFinderApp> {
         }
       }
     }
-    rs.sort(
-      (a, b) => ((a['fill'] as double) + (a['driveCost'] ?? 0)).compareTo(
-        (b['fill'] as double) + (b['driveCost'] ?? 0),
-      ),
-    );
-    if (context.mounted) setState(() {});
   }
 
   Future<void> _settings(BuildContext context) async {
-    final f = TextEditingController(text: fuel),
-        r = TextEditingController(text: '$radius'),
+    final r = TextEditingController(text: '$radius'),
         m = TextEditingController(text: '$mpg'),
         t = TextEditingController(text: '$tank');
+    FuelType selectedFuel = fuel;
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -301,11 +310,28 @@ class _AppState extends State<PetrolFinderApp> {
         content: SingleChildScrollView(
           child: Column(
             children: [
-              TextField(
-                controller: f,
-                decoration: const InputDecoration(
-                  labelText: 'Fuel type (E10, E5, B7_STANDARD…)',
-                ),
+              Text(
+                "Fuel Type",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              StatefulBuilder(
+                builder: (context, setState) {
+                  return RadioGroup<FuelType>(
+                    groupValue: selectedFuel,
+                    onChanged: (value) {
+                      setState(() => selectedFuel = value!);
+                    },
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: FuelType.values.map((ft) {
+                        return RadioListTile<FuelType>(
+                          value: ft,
+                          title: Text(ft.label),
+                        );
+                      }).toList(),
+                    ),
+                  );
+                },
               ),
               TextField(
                 controller: r,
@@ -326,6 +352,12 @@ class _AppState extends State<PetrolFinderApp> {
                   labelText: 'Tank size (litres)',
                 ),
               ),
+              const SizedBox(height: 10),
+              Text(
+                cache == null || cache!['stations'] == null
+                    ? 'No fuel stations loaded'
+                    : '${(cache!['stations'] as List).length} fuel stations loaded',
+              ),
             ],
           ),
         ),
@@ -336,21 +368,11 @@ class _AppState extends State<PetrolFinderApp> {
           ),
           FilledButton(
             onPressed: () async {
-              final sp = await SharedPreferences.getInstance();
-              await sp.setString('fuel_type', f.text.trim());
-              await sp.setDouble(
-                'radius_miles',
-                double.tryParse(r.text) ?? radius,
-              );
-              await sp.setDouble('mpg', double.tryParse(m.text) ?? mpg);
-              await sp.setDouble(
-                'tank_litres',
-                double.tryParse(t.text) ?? tank,
-              );
-              fuel = f.text.trim();
+              fuel = selectedFuel;
               radius = double.tryParse(r.text) ?? radius;
               mpg = double.tryParse(m.text) ?? mpg;
               tank = double.tryParse(t.text) ?? tank;
+              _find(context);
               if (mounted) {
                 Navigator.pop(context);
                 setState(() {});
@@ -361,6 +383,44 @@ class _AppState extends State<PetrolFinderApp> {
         ],
       ),
     );
+  }
+
+  Future<void> _chooseSort(BuildContext context) async {
+    final selected = await showDialog<SortType>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sort by'),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) => RadioGroup<SortType>(
+            groupValue: _sortType,
+            onChanged: (value) {
+              if (value != null) {
+                setDialogState(() {});
+                Navigator.pop(context, value);
+              }
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: SortType.values
+                  .map(
+                    (type) => RadioListTile<SortType>(
+                      title: Text(type.label),
+                      value: type,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (selected != null && context.mounted) {
+      setState(() {
+        _sortType = selected;
+        _sort(context);
+      });
+    }
   }
 
   @override
@@ -374,8 +434,10 @@ class _AppState extends State<PetrolFinderApp> {
           actions: [
             Builder(
               builder: (innerContext) => IconButton(
-                onPressed: () => _settings(innerContext),
-                icon: const Icon(Icons.settings),
+                tooltip: 'Sort by',
+                onPressed: () =>
+                    _nearbyResults.isEmpty ? null : _chooseSort(innerContext),
+                icon: const Icon(Icons.sort),
               ),
             ),
             Builder(
@@ -387,18 +449,17 @@ class _AppState extends State<PetrolFinderApp> {
                 icon: const Icon(Icons.sync),
               ),
             ),
+            Builder(
+              builder: (innerContext) => IconButton(
+                onPressed: () => _settings(innerContext),
+                icon: const Icon(Icons.settings),
+              ),
+            ),
           ],
         ),
         body: Column(
           children: [
-            ListTile(
-              title: Text(status),
-              subtitle: Text(
-                cache == null || cache!['stations'] == null
-                    ? 'No local station cache'
-                    : '${(cache!['stations'] as List).length} stations cached',
-              ),
-            ),
+            ListTile(title: Text(status)),
             if (pos == null)
               const Expanded(child: Center(child: Text('Waiting for GPS…')))
             else if (_nearbyResults.isEmpty)
@@ -419,7 +480,6 @@ class _AppState extends State<PetrolFinderApp> {
                     final routeMiles = x['distanceMeters'] == null
                         ? null
                         : (x['distanceMeters'] as num) / 1609.344;
-                    final drive = x['driveCost'] ?? 0.0;
                     final borderColor = x['open']
                         ? _ageColor(x['age'])
                         : Colors.red;
@@ -498,27 +558,24 @@ class _AppState extends State<PetrolFinderApp> {
                                 Row(
                                   children: [
                                     Text(
-                                      '$fuel: ${(x["price"] as double).toStringAsFixed(1)}p/L',
+                                      '${fuel.label}: ${(x["price"] as double).toStringAsFixed(1)}p/L',
                                     ),
                                     const SizedBox(width: 12),
                                     Text(
-                                      'Fillup £${(x["fill"] as double).toStringAsFixed(2)}',
+                                      '${x["age"]} ago',
+                                      style: TextStyle(
+                                        color: _ageColor(x['age']),
+                                      ),
                                     ),
-                                    x['duration'] != null
-                                        ? Text(
-                                            'round-trip £${drive.toStringAsFixed(2)}',
-                                          )
-                                        : const SizedBox(width: 0),
                                   ],
+                                ),
+                                Text(
+                                  'Total Fillup cost £${((x["fill"] as double) + (x['driveCost'] ?? 0)).toStringAsFixed(2)} ',
                                 ),
 
                                 const SizedBox(height: 8),
 
                                 // --- Age ---
-                                Text(
-                                  '${x["age"]} ago',
-                                  style: TextStyle(color: _ageColor(x['age'])),
-                                ),
                               ],
                             ),
                           ),

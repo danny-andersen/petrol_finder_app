@@ -21,40 +21,13 @@ class DetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
         children: [
-          // --- Basic Info ---
-          _sectionTitle('Basic Info'),
-          _infoRow('Brand', data['brand_name'] ?? 'N/A'),
-          _infoRow('Phone', data['public_phone_number'] ?? 'N/A'),
-          _infoRow(
-            'Temporary Closure',
-            data['temporary_closure'] != null
-                ? data['temporary_closure'].toString()
-                : 'N/A',
-          ),
-          _infoRow(
-            'Motorway Station',
-            data['is_motorway_service_station'] != null
-                ? data['is_motorway_service_station'].toString()
-                : 'N/A',
-          ),
-          _infoRow(
-            'Supermarket Station',
-            data['is_supermarket_service_station'] != null
-                ? data['is_supermarket_service_station'].toString()
-                : 'N/A',
-          ),
-
-          const SizedBox(height: 10),
-
           if (pfs.fuelPrices.isNotEmpty) ...[
-            _sectionTitle('Fuel Prices'),
-
             Column(
               children: pfs.fuelPrices.map((fp) {
                 String type = fp['fuel_type'];
-                if (type.contains('E')) {
+                if (type.startsWith('E')) {
                   type = "Petrol ($type)";
-                } else if (type.contains('B')) {
+                } else if (type.startsWith('B')) {
                   type = "Diesel ($type)";
                 }
                 final price = fp['price'];
@@ -62,23 +35,12 @@ class DetailScreen extends StatelessWidget {
 
                 return _infoRow(
                   type,
-                  '${price.toStringAsFixed(1)}p/L\n${formatDate(updated)}',
+                  // '${price.toStringAsFixed(1)}p/L\n${formatDate(updated)}',
+                  '${price.toStringAsFixed(1)}p/L',
                 );
               }).toList(),
             ),
           ],
-          const SizedBox(height: 10),
-          // --- Location ---
-          _sectionTitle('Location'),
-          _infoRow('Address 1', location['address_line_1']),
-          _infoRow('Address 2', location['address_line_2']),
-          _infoRow('City', location['city']),
-          _infoRow('County', location['county']),
-          _infoRow('Country', location['country']),
-          _infoRow('Postcode', location['postcode']),
-          _infoRow('Latitude', location['latitude'].toString()),
-          _infoRow('Longitude', location['longitude'].toString()),
-
           const SizedBox(height: 10),
 
           // --- Amenities ---
@@ -103,6 +65,42 @@ class DetailScreen extends StatelessWidget {
                   : '${info['open']} – ${info['close']}',
             );
           }),
+
+          const SizedBox(height: 10),
+          // --- Basic Info ---
+          _sectionTitle('Basic Info'),
+          _infoRow('Brand', data['brand_name'] ?? 'N/A'),
+          _infoRow('Phone', data['public_phone_number'] ?? 'N/A'),
+          _infoRow(
+            'Temporary Closure',
+            data['temporary_closure'] != null
+                ? data['temporary_closure'].toString()
+                : 'N/A',
+          ),
+          _infoRow(
+            'Motorway Station',
+            data['is_motorway_service_station'] != null
+                ? data['is_motorway_service_station'].toString()
+                : 'N/A',
+          ),
+          _infoRow(
+            'Supermarket Station',
+            data['is_supermarket_service_station'] != null
+                ? data['is_supermarket_service_station'].toString()
+                : 'N/A',
+          ),
+
+          const SizedBox(height: 10),
+          // --- Location ---
+          _sectionTitle('Location'),
+          _infoRow('Address 1', location['address_line_1']),
+          _infoRow('Address 2', location['address_line_2']),
+          _infoRow('City', location['city']),
+          _infoRow('County', location['county']),
+          _infoRow('Country', location['country']),
+          _infoRow('Postcode', location['postcode']),
+          _infoRow('Latitude', location['latitude'].toString()),
+          _infoRow('Longitude', location['longitude'].toString()),
         ],
       ),
     );
@@ -128,10 +126,12 @@ class DetailScreen extends StatelessWidget {
             width: 140,
             child: Text(
               label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
             ),
           ),
-          Expanded(child: Text(value ?? '—')),
+          Expanded(
+            child: Text(value ?? '—', style: const TextStyle(fontSize: 16)),
+          ),
         ],
       ),
     );

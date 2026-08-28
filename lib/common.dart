@@ -7,9 +7,60 @@ const fuelApi = 'https://www.fuel-finder.service.gov.uk/api/v1';
 const fuelTokenEndpoint = '$fuelApi/oauth/generate_access_token';
 const credentialsAsset = 'assets/config/fuel_finder_credentials.json';
 const maxRadiusMiles = 10.0;
-const defaultFuel = 'E10';
+const defaultFuel = FuelType.petrol;
 const defaultMpg = 65.0;
-const defaultTankLitres = 35.0;
+const defaultTankLitres = 30.0;
+
+enum FuelType { petrol, petrolPremium, diesel, dieselPremium, electric }
+
+extension FuelTypeLabel on FuelType {
+  String get label {
+    switch (this) {
+      case FuelType.petrol:
+        return 'Petrol (E10)';
+      case FuelType.petrolPremium:
+        return 'Petrol Premium (E5)';
+      case FuelType.diesel:
+        return 'Diesel (B7_STANDARD)';
+      case FuelType.dieselPremium:
+        return 'Diesel Premium (B7_PREMIUM)';
+      case FuelType.electric:
+        return 'Electric';
+    }
+  }
+
+  String get type {
+    switch (this) {
+      case FuelType.petrol:
+        return 'E10';
+      case FuelType.petrolPremium:
+        return 'E5';
+      case FuelType.diesel:
+        return 'B7_STANDARD';
+      case FuelType.dieselPremium:
+        return 'B7_PREMIUM';
+      case FuelType.electric:
+        return 'Electric';
+    }
+  }
+}
+
+enum SortType { price, totalCost, distance, time }
+
+extension SortTypeLabel on SortType {
+  String get label {
+    switch (this) {
+      case SortType.price:
+        return 'Fuel Price / L';
+      case SortType.totalCost:
+        return 'Total Fill up price (inc drive costs)';
+      case SortType.distance:
+        return 'Distance to Fuel Station (straight line or routed)';
+      case SortType.time:
+        return 'Time taken to drive to Fuel Station (if avail)';
+    }
+  }
+}
 
 class Pfs {
   final Map<String, dynamic> raw;
