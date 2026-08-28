@@ -246,7 +246,7 @@ class _AppState extends State<PetrolFinderApp> {
     String? mapsKey = _fuelFinderCredentials?.googleMapsApiKey;
     if (pos == null || mapsKey == null || mapsKey.isEmpty) return;
     final svc = RouteService(mapsKey);
-    for (final r in rs.take(5)) {
+    for (final r in rs) {
       final s = r['pfs'] as Pfs;
       try {
         final x = await svc.route(
