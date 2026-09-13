@@ -31,7 +31,7 @@ class DetailScreen extends StatelessWidget {
                   type = "Diesel ($type)";
                 }
                 final price = fp['price'];
-                final updated = fp['price_last_updated'];
+                // final updated = fp['price_last_updated'];
 
                 return _infoRow(
                   type,

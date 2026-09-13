@@ -2,9 +2,8 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-// import 'package:geolocator/geolocator.dart';
-import 'package:location/location.dart';
-
+import 'package:geolocator/geolocator.dart';
+import 'package:location/location.dart' as loc;
 import 'package:petrol_finder_app/common.dart';
 
 class RouteService {
@@ -65,12 +64,11 @@ class RouteService {
 //           const LocationSettings(accuracy: LocationAccuracy.high));
 // }
 
-Future<LatLong> currentPosition() async {
-  Location location = Location();
+Future<LatLong> currentPosition(bool headless) async {
+  loc.Location location = loc.Location();
 
   // bool serviceEnabled;
-  PermissionStatus permissionGranted;
-  LocationData locationData;
+  loc.LocationData locationData;
 
   // serviceEnabled = await location.serviceEnabled();
   // if (!serviceEnabled) {
@@ -80,18 +78,71 @@ Future<LatLong> currentPosition() async {
   //   }
   // }
 
-  permissionGranted = await location.hasPermission();
-  if (permissionGranted == PermissionStatus.denied) {
-    permissionGranted = await location.requestPermission();
-    if (permissionGranted != PermissionStatus.granted) {
-      throw Exception('Location permission is required.');
-    }
+  if (!await Geolocator.isLocationServiceEnabled()) {
+    throw Exception('Location services are disabled.');
   }
 
-  locationData = await location.getLocation();
-  return LatLong(
-    locationData.latitude,
-    locationData.longitude,
-    locationData.accuracy,
-  );
+  // Permission checks do not require an Activity. Requesting permission does,
+  // so a headless Android Auto engine must never call requestPermission().
+  var permission = await Geolocator.checkPermission();
+  if (permission == LocationPermission.denied && !headless) {
+    permission = await Geolocator.requestPermission();
+  }
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    throw Exception(
+      headless
+          ? 'Location permission must be granted to Petrol Finder on the phone before using Android Auto.'
+          : 'Location permission is required.',
+    );
+  }
+
+  // LocationPermission permissionGranted;
+  // permissionGranted = await location.hasPermission();
+  // if (permissionGranted == PermissionStatus.denied) {
+  //   permissionGranted = await location.requestPermission();
+  //   if (permissionGranted != PermissionStatus.granted) {
+  //     throw Exception('Location permission is required.');
+  //   }
+  // }
+
+  if (!headless) {
+    locationData = await location.getLocation();
+    return LatLong(
+      locationData.latitude,
+      locationData.longitude,
+      locationData.accuracy,
+    );
+  } else {
+    final settings = AndroidSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 0,
+      intervalDuration: const Duration(seconds: 1),
+      timeLimit: const Duration(seconds: 30),
+      foregroundNotificationConfig: const ForegroundNotificationConfig(
+        notificationTitle: 'Petrol Finder',
+        notificationText: 'Getting current location for nearby fuel stations',
+        enableWakeLock: false,
+      ),
+    );
+
+    try {
+      Stream<Position> positionStream = Geolocator.getPositionStream(
+        locationSettings: settings,
+      );
+      Position locationData = await positionStream.first.timeout(
+        const Duration(seconds: 30),
+      );
+      print(
+        'Current position obtained: ${locationData.latitude}, ${locationData.longitude}',
+      );
+      return LatLong(
+        locationData.latitude,
+        locationData.longitude,
+        locationData.accuracy,
+      );
+    } catch (e) {
+      throw Exception('Unable to obtain a current GPS position.');
+    }
+  }
 }

@@ -136,39 +136,3 @@ class FuelFinderApi {
     };
   }
 }
-
-bool isOpen(Map<String, dynamic> opening, DateTime now) {
-  final days = [
-    'monday',
-    'tuesday',
-    'wednesday',
-    'thursday',
-    'friday',
-    'saturday',
-    'sunday',
-  ];
-  final day = days[now.weekday - 1];
-  final d = opening['usual_days']?[day];
-  if (d == null) return false;
-  if (d['is_24_hours'] == true) return true;
-  final o = d['open'] as String?;
-  final c = d['close'] as String?;
-  if (o == null || c == null || o == c) return false;
-  final t = now.hour * 60 + now.minute;
-  int mins(String s) {
-    final x = s.split(':');
-    return int.parse(x[0]) * 60 + int.parse(x[1]);
-  }
-
-  final a = mins(o), b = mins(c);
-  return a < b ? t >= a && t < b : t >= a || t < b;
-}
-
-String ageText(String? iso) {
-  if (iso == null) return 'unknown';
-  final d = DateTime.tryParse(iso);
-  if (d == null) return 'unknown';
-  final days = DateTime.now().toUtc().difference(d.toUtc()).inHours / 24;
-  if (days < 1) return '${(days * 24).round()}h';
-  return '${days.toStringAsFixed(1)}d';
-}

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:petrol_finder_app/creds.dart';
 
 const fuelApi = 'https://www.fuel-finder.service.gov.uk/api/v1';
 const fuelTokenEndpoint = '$fuelApi/oauth/generate_access_token';
@@ -62,6 +63,24 @@ extension SortTypeLabel on SortType {
   }
 }
 
+class Status {
+  Map<String, dynamic>? cache;
+  FuelFinderTokenManager? tokenManager;
+  FuelFinderCredentials? fuelFinderCredentials;
+
+  LatLong? pos;
+  FuelType fuel = defaultFuel;
+  double radius = maxRadiusMiles, mpg = defaultMpg, tank = defaultTankLitres;
+  bool busy = false;
+  bool finding = false;
+  bool calcRoutes = false;
+  String status = 'Starting…';
+  DateTime? lastSync;
+  final List<Map<String, dynamic>> nearbyResults = [];
+  int stationsInRange = 0;
+  SortType sortType = SortType.totalCost;
+}
+
 class Pfs {
   final Map<String, dynamic> raw;
   Map<String, dynamic> prices;
@@ -119,4 +138,40 @@ String formatDate(String iso) {
   } catch (_) {
     return iso;
   }
+}
+
+bool isOpen(Map<String, dynamic> opening, DateTime now) {
+  final days = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday',
+  ];
+  final day = days[now.weekday - 1];
+  final d = opening['usual_days']?[day];
+  if (d == null) return false;
+  if (d['is_24_hours'] == true) return true;
+  final o = d['open'] as String?;
+  final c = d['close'] as String?;
+  if (o == null || c == null || o == c) return false;
+  final t = now.hour * 60 + now.minute;
+  int mins(String s) {
+    final x = s.split(':');
+    return int.parse(x[0]) * 60 + int.parse(x[1]);
+  }
+
+  final a = mins(o), b = mins(c);
+  return a < b ? t >= a && t < b : t >= a || t < b;
+}
+
+String ageText(String? iso) {
+  if (iso == null) return 'unknown';
+  final d = DateTime.tryParse(iso);
+  if (d == null) return 'unknown';
+  final days = DateTime.now().toUtc().difference(d.toUtc()).inHours / 24;
+  if (days < 1) return '${(days * 24).round()}h';
+  return '${days.toStringAsFixed(1)}d';
 }
