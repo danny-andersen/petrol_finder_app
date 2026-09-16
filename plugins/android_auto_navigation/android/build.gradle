@@ -1,0 +1,17 @@
+group 'com.example.android_auto_navigation'
+version '1.0.0'
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.example.android_auto_navigation'
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 21
+    }
+}
+repositories {
+    google()
+    mavenCentral()
+}

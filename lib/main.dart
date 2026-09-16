@@ -48,9 +48,9 @@ class _AppState extends State<PetrolFinderApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-    _initialisePhoneApp();
-    // }
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      _initialisePhoneApp();
+    }
   }
 
   @override
@@ -60,10 +60,10 @@ class _AppState extends State<PetrolFinderApp> with WidgetsBindingObserver {
     }
   }
 
-  void _initialisePhoneApp() {
+  void _initialisePhoneApp() async {
     if (_phoneInitialised) return;
-    _load(context);
-    _syncAndFind(context, false);
+    await _load(context);
+    await _syncAndFind(context, false);
     _phoneInitialised = true;
   }
 

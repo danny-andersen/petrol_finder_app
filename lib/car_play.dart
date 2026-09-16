@@ -1,5 +1,3 @@
-import 'package:url_launcher/url_launcher.dart';
-
 import 'package:flutter/services.dart';
 import 'package:flutter_carplay/flutter_carplay.dart';
 
@@ -18,11 +16,21 @@ class AndroidAutoController {
   ConnectionStatusTypes _androidAutoConnected =
       ConnectionStatusTypes.disconnected;
 
-  void init() {
+  void init() async {
     // setupCarBootstrap();
     _androidAuto.addListenerOnConnectionChange(_onAndroidAutoConnectionChange);
     print('Android Auto connection listener added');
-    updateAndroidAutoResults();
+    checkAndroidAutoConnection();
+    await _autoFind();
+    // updateAndroidAutoResults();
+  }
+
+  void checkAndroidAutoConnection() {
+    _androidAutoConnected =
+        FlutterAndroidAuto.connectionStatus ==
+            ConnectionStatusTypes.connected.name
+        ? ConnectionStatusTypes.connected
+        : ConnectionStatusTypes.disconnected;
   }
 
   void _onAndroidAutoConnectionChange(ConnectionStatusTypes connected) {
@@ -82,16 +90,61 @@ class AndroidAutoController {
   }
 
   Future<void> _navigate(Pfs p) async {
-    final uri = Uri.parse('google.navigation:q=${p.lat},${p.lon}');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      final web = Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}',
+    if (p.lat == null || p.lon == null) {
+      print('No coordinates for ${p.name}, cannot navigate');
+      return;
+    }
+    await navigateToPointOnAndroidAuto(
+      latitude: p.lat!,
+      longitude: p.lon!,
+      label: p.name,
+    );
+    // AndroidAutoNavigator.startNavigation(
+    //   latitude: p.lat!,
+    //   longitude: p.lon!,
+    //   label: p.name,
+    // );
+  }
+
+  Future<void> navigateToPointOnAndroidAuto({
+    required double latitude,
+    required double longitude,
+    String label = 'Destination',
+  }) async {
+    print('Requesting native Android Auto navigation to $latitude, $longitude');
+
+    try {
+      await AndroidAutoNavigator.startNavigation(
+        latitude: latitude,
+        longitude: longitude,
+        label: label,
       );
-      await launchUrl(web, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      print('Could not start Android Auto navigation: $e');
     }
   }
+
+  // void navigateToPointOnAndroidAuto({
+  //   required double latitude,
+  //   required double longitude,
+  // }) async {
+  //   // Construct the geo URI string
+  //   final String geoUri = 'google.navigation:q=$latitude,$longitude';
+
+  //   final AndroidIntent intent = AndroidIntent(
+  //     action: 'android.intent.action.VIEW',
+  //     data: geoUri,
+  //     // Optional: explicitly target the map/car intent system if needed
+  //     flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+  //   );
+
+  //   print('Launching Android Auto navigation to $latitude, $longitude');
+  //   try {
+  //     await intent.launch();
+  //   } catch (e) {
+  //     print("Could not launch Android Auto navigation: $e");
+  //   }
+  // }
 
   static void setInitialCarplayRootTemplate() {
     final template = AAListTemplate(
@@ -114,6 +167,7 @@ class AndroidAutoController {
   }
 
   Future<void> updateAndroidAutoResults() async {
+    checkAndroidAutoConnection();
     // if (!_androidAutoConnected) return;
 
     final snapshot = List<Map<String, dynamic>>.from(state.nearbyResults);
@@ -123,11 +177,24 @@ class AndroidAutoController {
       print('No nearby stations found, showing status: ${state.status}');
       items.add(
         AAListItem(
-          title: 'No nearby stations found, please wait...',
+          title: 'No nearby stations found, press to refresh...',
+          onPress: (complete, self) async {
+            await _autoFind();
+            complete();
+          },
           // subtitle: _finding ? status : 'Use GPS on the phone to find stations',
         ),
       );
     } else {
+      items.add(
+        AAListItem(
+          title: "Press to refresh",
+          onPress: (complete, self) async {
+            await _autoFind();
+            complete();
+          },
+        ),
+      );
       for (final x in snapshot.take(20)) {
         final p = x['pfs'] as Pfs;
         final price = (x['price'] as num).toDouble();
@@ -171,3 +238,29 @@ class AndroidAutoController {
     }
   }
 }
+
+class AndroidAutoNavigator {
+  // Define a unique channel name
+  static const MethodChannel _channel = MethodChannel(
+    'com.dsa.petrol_finder_app/android_auto',
+  );
+
+  static Future<void> startNavigation({
+    required double latitude,
+    required double longitude,
+    String label = 'Destination',
+  }) async {
+    try {
+      await _channel.invokeMethod('startNavigation', {
+        'latitude': latitude,
+        'longitude': longitude,
+        'label': label,
+      });
+    } on PlatformException catch (e) {
+      print("Failed to start navigation: '${e.message}'.");
+    }
+  }
+}
+
+// Example usage:
+// await AndroidAutoNavigator.startNavigation(latitude: 37.7749, longitude: -122.4194, label: "San Francisco");

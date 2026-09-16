@@ -1,0 +1,15 @@
+name: android_auto_navigation
+description: Native Android navigation launcher for Android Auto/headless Flutter engines.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.0.0"
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.example.android_auto_navigation
+        pluginClass: AndroidAutoNavigationPlugin

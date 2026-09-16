@@ -8,9 +8,34 @@
     <uses-feature android:name="android.software.car.app.library" android:required="false"/>
 
     <application
-        android:label="petrol_finder_app"
+        android:label="Petrol Finder"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
+
+        <!-- For Android Auto START -->
+       <meta-data
+                android:name="com.google.android.gms.car.application"
+                android:resource="@xml/automotive_app_desc" />
+        <meta-data
+                android:name="androidx.car.app.minCarApiLevel"
+                android:value="1" />
+        <service
+                android:name="com.oguzhnatly.flutter_android_auto.AndroidAutoService"
+                android:exported="true"
+                android:label="Petrol Finder"
+                android:icon="@mipmap/launcher_icon">           
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.POI"/>
+            </intent-filter>
+            <meta-data
+                android:name="androidx.car.app.CarAppService"
+                android:resource="@xml/car_app" />
+        </service>
+        <!-- <service
+            android:name=".CarBootstrapService"
+            android:exported="false" /> -->
+                <!-- For Android Auto END -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -33,34 +58,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-                <!-- For Android Auto START -->
-        <!-- <meta-data
-                android:name="com.google.android.gms.car.application"
-                android:resource="@xml/automotive_app_desc" /> -->
-       <meta-data
-                android:name="com.google.android.gms.car.application"
-                android:resource="@xml/automotive_app_desc" />
-        <meta-data
-                android:name="androidx.car.app.minCarApiLevel"
-                android:value="1" />
-        <service
-                android:name="com.oguzhnatly.flutter_android_auto.AndroidAutoService"
-                android:exported="true">
-            <intent-filter>
-                <action android:name="androidx.car.app.CarAppService" />
-                <category android:name="androidx.car.app.category.NAVIGATION"/>
-            </intent-filter>
-            <meta-data
-                android:name="androidx.car.app.CarAppService"
-                android:resource="@xml/car_app" />
-        </service>
-        <meta-data
-                android:name="androidx.car.app.minCarApiLevel"
-                android:value="1" />
-        <!-- <service
-            android:name=".CarBootstrapService"
-            android:exported="false" /> -->
-                <!-- For Android Auto END -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
