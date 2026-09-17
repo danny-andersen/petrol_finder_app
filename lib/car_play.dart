@@ -245,9 +245,7 @@ class AndroidAutoController {
     try {
       await FlutterAndroidAuto.setRootTemplate(template: template);
       _androidAuto.forceUpdateRootTemplate();
-      print(
-        'Connected status: $_androidAutoConnected. Android Auto template updated with ${items.length} items',
-      );
+      // print('${state.status}. Android Auto template ${items.length} items');
     } catch (e) {
       // Android Auto may disconnect while the phone UI is updating.
       print('Failed to update Android Auto template: $e');
