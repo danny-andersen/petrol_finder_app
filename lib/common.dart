@@ -72,8 +72,6 @@ class Status {
   FuelType fuel = defaultFuel;
   double radius = maxRadiusMiles, mpg = defaultMpg, tank = defaultTankLitres;
   bool busy = false;
-  bool finding = false;
-  bool calcRoutes = false;
   String status = 'Starting…';
   DateTime? lastSync;
   final List<Map<String, dynamic>> nearbyResults = [];
@@ -111,6 +109,7 @@ class CacheStore {
     try {
       return jsonDecode(await f.readAsString()) as Map<String, dynamic>;
     } catch (_) {
+      print('Failed to load cache file, ignoring');
       return null;
     }
   }

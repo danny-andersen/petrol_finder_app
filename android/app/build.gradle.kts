@@ -15,6 +15,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+
+dependencies {
+    // Android for Cars API used by the existing flutter_carplay CarAppService.
+    // The app needs this directly because the navigation bridge references CarContext.
+    implementation("androidx.car.app:app:1.7.0")
+}
+
 android {
     namespace = "com.dsa.petrol_finder_app"
     compileSdk = flutter.compileSdkVersion

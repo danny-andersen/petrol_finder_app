@@ -19,8 +19,9 @@ class AndroidAutoController {
   void init() async {
     // setupCarBootstrap();
     _androidAuto.addListenerOnConnectionChange(_onAndroidAutoConnectionChange);
-    print('Android Auto connection listener added');
+    // print('Android Auto connection listener added');
     checkAndroidAutoConnection();
+    state.cache = await CacheStore().load();
     await _autoFind();
     // updateAndroidAutoResults();
   }
@@ -34,7 +35,7 @@ class AndroidAutoController {
   }
 
   void _onAndroidAutoConnectionChange(ConnectionStatusTypes connected) {
-    print('Android Auto connection status: $_androidAutoConnected');
+    // print('Android Auto connection status: $_androidAutoConnected');
     if (_androidAutoConnected != connected &&
         connected == ConnectionStatusTypes.connected) {
       _androidAutoConnected = connected;
@@ -46,36 +47,49 @@ class AndroidAutoController {
     }
   }
 
-  void setupCarBootstrap() {
-    channel.setMethodCallHandler((call) async {
-      if (call.method == "carStart") {
-        print("Car app started");
-        await _autoFind();
-      }
-    });
-  }
-
   void dispose() {
     _androidAuto.removeListenerOnConnectionChange();
   }
 
   Future<void> _autoFind() async {
-    // try {
+    if (state.busy) return;
+    state.busy = true;
     state.status = 'Checking for updates to fuel station data…';
     updateAndroidAutoResults();
-    await pfsController!.sync();
-    state.status = 'Waiting for GPS...';
+    try {
+      await pfsController!.sync();
+      state.status = 'Waiting for GPS...';
+    } catch (e) {
+      state.status =
+          'Note cannot refresh Petrol Station data, waiting for GPS...';
+    }
     updateAndroidAutoResults();
-    print("Calling currentPosition() for Android Auto with headless mode");
-    state.pos = await currentPosition(true);
-    state.status = 'Finding nearby stations...';
+    // print("Calling currentPosition() for Android Auto with headless mode");
+    try {
+      state.pos = await currentPosition(true);
+      state.status = 'Finding nearby stations...';
+    } catch (e) {
+      state.status =
+          'Error getting GPS position: $e. Please check location permissions.';
+      updateAndroidAutoResults();
+      state.busy = false;
+      return;
+    }
     updateAndroidAutoResults();
     await pfsController!.find();
     updateAndroidAutoResults();
     // Calculate road routes.
-    await pfsController!.routes();
+    try {
+      await pfsController!.routes();
+    } catch (e) {
+      state.status = 'Error calculating routes, sorted by price only: $e';
+      updateAndroidAutoResults();
+      state.busy = false;
+      return;
+    }
     pfsController!.sort();
     updateAndroidAutoResults();
+    state.busy = false;
   }
 
   String _aaDuration(Map<String, dynamic> x) {
@@ -91,7 +105,7 @@ class AndroidAutoController {
 
   Future<void> _navigate(Pfs p) async {
     if (p.lat == null || p.lon == null) {
-      print('No coordinates for ${p.name}, cannot navigate');
+      state.status = 'No coordinates for ${p.name}, cannot navigate';
       return;
     }
     await navigateToPointOnAndroidAuto(
@@ -111,7 +125,7 @@ class AndroidAutoController {
     required double longitude,
     String label = 'Destination',
   }) async {
-    print('Requesting native Android Auto navigation to $latitude, $longitude');
+    // print('Requesting native Android Auto navigation to $latitude, $longitude');
 
     try {
       await AndroidAutoNavigator.startNavigation(
@@ -120,7 +134,7 @@ class AndroidAutoController {
         label: label,
       );
     } catch (e) {
-      print('Could not start Android Auto navigation: $e');
+      state.status = 'Could not start Android Auto navigation: $e';
     }
   }
 
@@ -168,13 +182,13 @@ class AndroidAutoController {
 
   Future<void> updateAndroidAutoResults() async {
     checkAndroidAutoConnection();
-    // if (!_androidAutoConnected) return;
+    if (_androidAutoConnected != ConnectionStatusTypes.connected) return;
 
     final snapshot = List<Map<String, dynamic>>.from(state.nearbyResults);
     final items = <AAListItem>[];
 
     if (snapshot.isEmpty) {
-      print('No nearby stations found, showing status: ${state.status}');
+      // print('No nearby stations found, showing status: ${state.status}');
       items.add(
         AAListItem(
           title: 'No nearby stations found, press to refresh...',
@@ -197,6 +211,8 @@ class AndroidAutoController {
       );
       for (final x in snapshot.take(20)) {
         final p = x['pfs'] as Pfs;
+        final open = x['open'] ? 'OPEN' : 'CLOSED';
+
         final price = (x['price'] as num).toDouble();
         final distance = x['distanceMeters'] == null
             ? '${(x['straight'] as num).toDouble().toStringAsFixed(1)} mi'
@@ -205,11 +221,11 @@ class AndroidAutoController {
             (x['fill'] as num).toDouble() +
             ((x['driveCost'] ?? 0) as num).toDouble();
         final subtitle =
-            '${state.fuel.label} ${price.toStringAsFixed(1)}p/L • $distance • ${_aaDuration(x)} • £${total.toStringAsFixed(2)}';
+            '${state.fuel.label} ${price.toStringAsFixed(1)}p/L • $distance • ${_aaDuration(x)} • £${total.toStringAsFixed(2)} ${x["age"]} ago';
 
         items.add(
           AAListItem(
-            title: p.name,
+            title: '${p.name} ($open)',
             subtitle: subtitle,
             onPress: (complete, self) async {
               await _navigate(p);
