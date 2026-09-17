@@ -133,9 +133,9 @@ Future<LatLong> currentPosition(bool headless) async {
       Position locationData = await positionStream.first.timeout(
         const Duration(seconds: 30),
       );
-      print(
-        'Current position obtained: ${locationData.latitude}, ${locationData.longitude}',
-      );
+      // print(
+      //   'Current position obtained: ${locationData.latitude}, ${locationData.longitude}',
+      // );
       return LatLong(
         locationData.latitude,
         locationData.longitude,

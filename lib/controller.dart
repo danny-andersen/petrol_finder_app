@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:geolocator/geolocator.dart';
 
 import 'package:petrol_finder_app/common.dart';
+import 'package:petrol_finder_app/creds.dart';
 import 'package:petrol_finder_app/location.dart';
 import 'package:petrol_finder_app/fuel_finder.dart';
 
@@ -11,15 +14,26 @@ class PfsController extends ChangeNotifier {
   Status state;
   PfsController(this.state);
 
+  Future<void> load() async {
+    try {
+      final String jsonString = await rootBundle.loadString(credentialsAsset);
+      state.fuelFinderCredentials = FuelFinderCredentials.fromJson(
+        jsonDecode(jsonString) as Map<String, dynamic>,
+      );
+      state.tokenManager = FuelFinderTokenManager(state.fuelFinderCredentials!);
+    } catch (e) {
+      state.status = 'Fuel Finder credentials unavailable: $e';
+    }
+    state.cache ??= await CacheStore().load();
+  }
+
   Future<void> sync() async {
-    if (state.busy) return;
     if (state.lastSync != null &&
         DateTime.now().difference(state.lastSync!).inMinutes < 15) {
       state.status =
           'Last sync was ${state.lastSync!.toLocal().toString().substring(0, 16)}';
       return;
     }
-    state.busy = true;
     try {
       final tokenManager = state.tokenManager;
       if (tokenManager == null) {
@@ -38,14 +52,10 @@ class PfsController extends ChangeNotifier {
           'Data updated ${state.lastSync!.toLocal().toString().substring(0, 16)}';
     } catch (e) {
       state.status = 'Data Update failed: $e';
-    } finally {
-      state.busy = false;
     }
   }
 
   Future<void> find() async {
-    if (state.finding || state.calcRoutes) return;
-    state.finding = true;
     state.nearbyResults.clear();
     state.stationsInRange = 0;
     List<String> stationIdsInRange = [];
@@ -104,7 +114,6 @@ class PfsController extends ChangeNotifier {
     sort();
     state.status =
         'Routes for ${state.nearbyResults.length} stations found in ${state.radius} miles';
-    state.finding = false;
   }
 
   void sort() {
@@ -146,30 +155,31 @@ class PfsController extends ChangeNotifier {
   }
 
   Future<void> routes() async {
-    if (state.finding || state.calcRoutes) return;
-    state.calcRoutes = true;
-    String? mapsKey = state.fuelFinderCredentials?.googleMapsApiKey;
-    if (state.pos == null || mapsKey == null || mapsKey.isEmpty) return;
-    final svc = RouteService(mapsKey);
-    for (final r in state.nearbyResults) {
-      final s = r['pfs'] as Pfs;
-      final x = await svc.route(
-        state.pos!.latitude,
-        state.pos!.longitude,
-        s.lat!,
-        s.lon!,
-      );
-      String duration = x['duration'];
-      r['distanceMeters'] = x['distanceMeters'];
-      r['duration'] =
-          double.parse(duration.substring(0, duration.length - 1)) / 60.0;
-      r['driveCost'] = _cost(
-        r['price'] as double,
-        (x['distanceMeters'] as num).toDouble() / 1609.344,
-      );
-      await Future<void>.delayed(Duration.zero);
+    try {
+      String? mapsKey = state.fuelFinderCredentials?.googleMapsApiKey;
+      if (state.pos == null || mapsKey == null || mapsKey.isEmpty) return;
+      final svc = RouteService(mapsKey);
+      for (final r in state.nearbyResults) {
+        final s = r['pfs'] as Pfs;
+        final x = await svc.route(
+          state.pos!.latitude,
+          state.pos!.longitude,
+          s.lat!,
+          s.lon!,
+        );
+        String duration = x['duration'];
+        r['distanceMeters'] = x['distanceMeters'];
+        r['duration'] =
+            double.parse(duration.substring(0, duration.length - 1)) / 60.0;
+        r['driveCost'] = _cost(
+          r['price'] as double,
+          (x['distanceMeters'] as num).toDouble() / 1609.344,
+        );
+        await Future<void>.delayed(Duration.zero);
+      }
+    } catch (e) {
+      state.status = 'Error calculating routes, sorted by price only: $e';
     }
-    state.calcRoutes = false;
   }
 
   // Future<void> refresh() async {

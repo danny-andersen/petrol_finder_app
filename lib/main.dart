@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:petrol_finder_app/common.dart';
-import 'package:petrol_finder_app/creds.dart';
 import 'package:petrol_finder_app/location.dart';
 import 'package:petrol_finder_app/detail_screen.dart';
 import 'package:petrol_finder_app/controller.dart';
@@ -22,6 +20,7 @@ final PfsController _pfsController = PfsController(appState);
 void main() async {
   // 1. Force the binary messenger to bind native Android service threads
   WidgetsFlutterBinding.ensureInitialized();
+  _pfsController.load();
   _androidAutoController.pfsController = _pfsController;
   _androidAutoController.init();
 
@@ -42,29 +41,18 @@ class PetrolFinderApp extends StatefulWidget {
 }
 
 class _AppState extends State<PetrolFinderApp> with WidgetsBindingObserver {
-  bool _phoneInitialised = false;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-      _initialisePhoneApp();
-    }
+    _syncAndFind(context, false);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _initialisePhoneApp();
+      _syncAndFind(context, false);
     }
-  }
-
-  void _initialisePhoneApp() async {
-    if (_phoneInitialised) return;
-    await _load(context);
-    await _syncAndFind(context, false);
-    _phoneInitialised = true;
   }
 
   @override
@@ -73,73 +61,49 @@ class _AppState extends State<PetrolFinderApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  Future<void> _load(BuildContext context) async {
-    try {
-      if (context.mounted) {
-        final raw = await DefaultAssetBundle.of(context)
-            .loadString(credentialsAsset);
-        appState.fuelFinderCredentials = FuelFinderCredentials.fromJson(
-          jsonDecode(raw) as Map<String, dynamic>,
-        );
-        appState.tokenManager = FuelFinderTokenManager(
-          appState.fuelFinderCredentials!,
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        setState(() {
-          appState.status = 'Fuel Finder credentials unavailable: $e';
-        });
-      }
-    }
-    if (context.mounted) {
-      setState(() {
-        appState.status = 'Loading cache data…';
-      });
-    }
-    appState.cache = await CacheStore().load();
-  }
-
   Future<void> _syncAndFind(BuildContext context, bool headless) async {
-    // try {
+    if (appState.busy) return;
+    appState.busy = true;
     if (context.mounted) {
       setState(() {
         appState.status = 'Checking for updates to fuel station data…';
       });
     }
-    await _pfsController.sync();
+    try {
+      await _pfsController.sync();
+    } catch (e) {
+      appState.status =
+          'Cannot refresh Petrol Station data ($e), waiting for GPS...';
+    }
+    if (context.mounted) {
+      setState(() {});
+    }
     if (context.mounted) {
       setState(() {
         appState.status = 'Waiting for GPS...';
       });
     }
-    appState.pos = await currentPosition(headless);
+    try {
+      appState.pos = await currentPosition(headless);
+    } catch (e) {
+      if (context.mounted) {
+        setState(() {
+          appState.status =
+              'Error getting GPS position: $e. Please check location permissions.';
+        });
+      }
+      _androidAutoController.updateAndroidAutoResults();
+      appState.busy = false;
+      return;
+    }
     if (context.mounted) {
       setState(() {
         appState.status = 'Finding nearby stations...';
       });
     }
+    _androidAutoController.updateAndroidAutoResults();
     await _findAndRoute(context);
-    // } catch (e) {
-    //  appState.busy = false;
-    //   appState.finding = false;
-    //   appState.calcRoutes = false;
-    //   if (context.mounted) {
-    //     setState(() {});
-    //     if (e.toString().contains('Routes API 429')) {
-    //       ScaffoldMessenger.of(context).showSnackBar(
-    //         SnackBar(
-    //           content: Text(
-    //             '${appState.status}: Maps Routes API request failed (429). This is likely due to exceeding the free quota. Please check your Google Cloud Console for usage and billing.',
-    //           ),
-    //         ),
-    //       );
-    //     } else {
-    //       ScaffoldMessenger.of(context)
-    //           .showSnackBar(SnackBar(content: Text('${appState.status}: $e')));
-    //     }
-    //   }
-    // }
+    appState.busy = false;
   }
 
   Future<void> _findAndRoute(BuildContext context) async {
@@ -147,8 +111,18 @@ class _AppState extends State<PetrolFinderApp> with WidgetsBindingObserver {
     if (context.mounted) {
       setState(() {});
     }
+    _androidAutoController.updateAndroidAutoResults();
     // Calculate road routes.
-    await _pfsController.routes();
+    try {
+      await _pfsController.routes();
+    } catch (e) {
+      appState.status = 'Error calculating routes, sorted by price only: $e';
+      if (context.mounted) {
+        setState(() {});
+      }
+      _androidAutoController.updateAndroidAutoResults();
+      return;
+    }
     _pfsController.sort();
     if (context.mounted) {
       setState(() {});
@@ -326,7 +300,7 @@ class _AppState extends State<PetrolFinderApp> with WidgetsBindingObserver {
               Expanded(
                 child: Center(
                   child: Text(
-                    appState.finding ? 'Scanning the cached stations…' : 'No stations in range with a price for the selected fuel.',
+                    'Found no stations in range for the selected fuel.',
                   ),
                 ),
               )
