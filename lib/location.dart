@@ -65,9 +65,6 @@ class RouteService {
 // }
 
 Future<LatLong> currentPosition(bool headless) async {
-  loc.Location location = loc.Location();
-
-  // bool serviceEnabled;
   loc.LocationData locationData;
 
   // serviceEnabled = await location.serviceEnabled();
@@ -107,6 +104,10 @@ Future<LatLong> currentPosition(bool headless) async {
   // }
 
   if (!headless) {
+    loc.Location location = loc.Location();
+
+    // bool serviceEnabled;
+
     locationData = await location.getLocation();
     return LatLong(
       locationData.latitude,

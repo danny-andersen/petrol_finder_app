@@ -161,10 +161,9 @@ packages:
   flutter_carplay:
     dependency: "direct main"
     description:
-      name: flutter_carplay
-      sha256: ca3bed87715eb9bb8adf69e7a7878bcd971d09af231b6f3216e8033c4e6ba3d8
-      url: "https://pub.dev"
-    source: hosted
+      path: "../flutter_carplay"
+      relative: true
+    source: path
     version: "1.6.5"
   flutter_launcher_icons:
     dependency: "direct dev"

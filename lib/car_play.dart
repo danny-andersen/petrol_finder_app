@@ -66,7 +66,18 @@ class AndroidAutoController {
     updateAndroidAutoResults();
     // print("Calling currentPosition() for Android Auto with headless mode");
     try {
-      state.pos = await currentPosition(true);
+      for (int i = 0; i < 3; i++) {
+        try {
+          state.pos = await currentPosition(true);
+          break;
+        } catch (e) {
+          print('Attempt ${i + 1} to get GPS position failed: $e');
+          if (i == 2) rethrow; // Rethrow on the last attempt
+          await Future.delayed(
+            const Duration(seconds: 1),
+          ); // Wait before retrying
+        }
+      }
       state.status = 'Finding nearby stations...';
     } catch (e) {
       state.status =
@@ -182,6 +193,9 @@ class AndroidAutoController {
 
   Future<void> updateAndroidAutoResults() async {
     checkAndroidAutoConnection();
+    // print(
+    //   'Updating Android Auto results, connection status: $_androidAutoConnected, state: ${state.status}, nearbyResults: ${state.nearbyResults.length}',
+    // );
     if (_androidAutoConnected != ConnectionStatusTypes.connected) return;
 
     final snapshot = List<Map<String, dynamic>>.from(state.nearbyResults);
